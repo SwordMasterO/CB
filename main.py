@@ -1,19 +1,16 @@
 import os
 import discord
-import torch
-from transformers import AutoTokenizer, AutoModelWithLMHead
+from huggingface_hub import InferenceClient
 
-# Define constants for model and API
-MODEL_NAME = "SwordMasterO/DialoGPT-medium-Hermione"
+# Initialize the Hugging Face Inference Client with an access token
+hf_access_token = os.getenv('HUGGINGFACE_TOKEN')
+client = InferenceClient(token=hf_access_token)
 
-# Initialize tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelWithLMHead.from_pretrained(MODEL_NAME)
+intents = discord.Intents.default()
+intents.message_content = True
 
 class MyClient(discord.Client):
-    def __init__(self):
-        intents = discord.Intents.default()
-        intents.message_content = True
+    def __init__(self, intents):
         super().__init__(intents=intents)
 
     async def on_ready(self):
@@ -24,33 +21,34 @@ class MyClient(discord.Client):
 
     async def on_message(self, message):
         # Ignore messages from the bot itself
-        if message.author.id == self.user.id:
+        if message.author == self.user:
             return
 
-        # Encode the new user input, add the eos_token and return a tensor in Pytorch
-        new_user_input_ids = tokenizer.encode(message.content + tokenizer.eos_token, return_tensors='pt')
+        async with message.channel.typing():
+            try:
+                # Make a request to the Hugging Face model for chat completion
+                response = client.chat_completion(
+                    messages=[{"role": "user", "content": message.content}],
+                    model="SwordMasterO/DialoGPT-medium-Hermione"
+                )
+                print(f"Response: {response}")  # Debug print to inspect the response structure
 
-        # Append the new user input tokens to the chat history
-        bot_input_ids = torch.cat([chat_history_ids, new_user_input_ids], dim=-1) if 'chat_history_ids' in globals() else new_user_input_ids
+                # Extract the generated response from the Hugging Face model
+                if isinstance(response, dict) and 'choices' in response and len(response['choices']) > 0:
+                    bot_response = response['choices'][0].get('message', {}).get('content', 'Hmm... something is not right.')
+                else:
+                    bot_response = 'Hmm... something is not right.'
 
-        # Generate a response while limiting the total chat history to 1000 tokens
-        chat_history_ids = model.generate(
-            bot_input_ids, max_length=200,
-            pad_token_id=tokenizer.eos_token_id,
-            no_repeat_ngram_size=3,
-            do_sample=True,
-            top_k=100,
-            top_p=0.7,
-            temperature=0.8
-        )
+            except Exception as e:
+                print(f"Request error occurred: {e}")
+                bot_response = 'Hmm... something went wrong.'
 
-        # Decode the response and send it back to the Discord channel
-        response_text = tokenizer.decode(chat_history_ids[:, bot_input_ids.shape[-1]:][0], skip_special_tokens=True)
-        await message.channel.send(response_text)
+        # Send the model's response to the Discord channel
+        await message.channel.send(bot_response)
 
 def main():
     # Instantiate the bot client
-    client = MyClient()
+    client = MyClient(intents=intents)
     # Run the bot with the token from the environment variable
     client.run(os.getenv('DISCORD_TOKEN'))
 

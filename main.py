@@ -1,6 +1,5 @@
 import os
 import discord
-from Immortal import Immortal
 from huggingface_hub import InferenceClient
 
 # Initialize the Hugging Face Inference Client with an access token
@@ -47,11 +46,20 @@ class MyClient(discord.Client):
         # Send the model's response to the Discord channel
         await message.channel.send(bot_response)
 
+    async def on_disconnect(self):
+        print('Disconnected from Discord gateway. Attempting to reconnect...')
+        while True:
+            try:
+                await self.start(os.getenv('DISCORD_TOKEN'))
+                break  # Exit loop if reconnection successful
+            except Exception as e:
+                print(f"Error during reconnection attempt: {e}")
+                await asyncio.sleep(5)  # Wait for a few seconds before retrying
+
 def main():
     # Instantiate the bot client
     client = MyClient(intents=intents)
     # Run the bot with the token from the environment variable
-    Immortal()
     client.run(os.getenv('DISCORD_TOKEN'))
 
 if __name__ == '__main__':

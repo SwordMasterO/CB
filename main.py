@@ -47,16 +47,6 @@ class MyClient(discord.Client):
         # Send the model's response to the Discord channel
         await message.channel.send(bot_response)
 
-    async def on_disconnect(self):
-        print('Disconnected from Discord gateway. Attempting to reconnect...')
-        while True:
-            try:
-                await self.start(os.getenv('DISCORD_TOKEN'))
-                break  # Exit loop if reconnection successful
-            except Exception as e:
-                print(f"Error during reconnection attempt: {e}")
-                await asyncio.sleep(5)  # Wait for a few seconds before retrying
-
 def main():
     # Instantiate the bot client
     client = MyClient(intents=intents)
